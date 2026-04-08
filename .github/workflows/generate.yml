@@ -1,0 +1,62 @@
+name: Generate Go Code from Proto Files
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Generator Repository
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Clone Proto Files Repository
+        run: |
+          git clone https://github.com/SULTE4/protos.git
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Install protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+          protoc --version
+
+      - name: Install protoc-gen-go and protoc-gen-go-grpc
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Generate Go Code from Proto Files
+        run: |
+          cd protos
+          find . -name "*.proto" | while read proto_file; do
+            dir=$(dirname "$proto_file")
+            protoc \
+              --proto_path=. \
+              --go_out=.. \
+              --go_opt=paths=source_relative \
+              --go-grpc_out=.. \
+              --go-grpc_opt=paths=source_relative \
+              "$proto_file"
+          done
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "SULTE4"
+          git config --global user.email "sultanbek@example.com"
+
+      - name: Commit and Push Generated Files
+        run: |
+          git add .
+          git diff --cached --quiet || git commit -m "Auto-generate .pb.go files from protos"
+          git push https://SULTE4:${{ secrets.PAT_TOKEN }}@github.com/SULTE4/proto-gen.git HEAD:main
